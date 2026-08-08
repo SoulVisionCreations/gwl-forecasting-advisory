@@ -1,0 +1,10 @@
+a,b,net_read,crop_lean,tier
+above,above,both good - strong surplus,water-heavy; can expand confidently,water-heavy
+above,normal,clear surplus,confidently water-heavy,water-heavy
+above,below,recovery but from a hole,water-heavy; keep a margin,water-heavy
+normal,above,cushion in hand,usual; a cushion from last year (no need to under-plant),usual
+normal,normal,typical year,usual crop; no change,usual
+normal,below,normal recharge but starting low,usual-to-light; don't expand,usual-to-light
+below,above,weak recharge - good prior year,usual-to-light; watch closely,usual-to-light
+below,normal,weak recharge,lean water-light,water-light
+below,below,bad on both ends,water-light; conserve,water-light

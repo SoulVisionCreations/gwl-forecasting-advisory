@@ -1,0 +1,148 @@
+openapi: 3.0.3
+info:
+  title: GWL Groundwater Advisory API
+  version: "1.0"
+  description: >
+    Farmer-facing groundwater crop/water advisory for India. Given a location (lat/lon) and an
+    as-of date, returns whether groundwater is set to rise (recharge) or fall (deplete) over the
+    next 3 and 6 months versus the local seasonal normal, whether a long-duration crop is workable,
+    a confidence level, and a short plain-language message. Served by `advisory.serve_advisory:app`.
+    See docs/ADVISORY.md for setup and the env-var reference.
+  license:
+    name: Apache-2.0
+servers:
+  - url: http://localhost:8100
+    description: local advisory service (uvicorn advisory.serve_advisory:app)
+paths:
+  /health:
+    get:
+      summary: Liveness / readiness
+      responses:
+        "200":
+          description: Service state
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+                  loaded: { type: boolean, example: true }
+                  has_6m: { type: boolean, example: true, description: whether the 6-month engine is loaded }
+        "503":
+          description: Engine not loaded (still starting or misconfigured)
+  /advisory:
+    post:
+      summary: Groundwater crop/water advisory for a point
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdvisoryRequest"
+      responses:
+        "200":
+          description: Advisory (status ok) or a structured error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdvisoryResponse"
+        "503":
+          description: Service not ready
+components:
+  schemas:
+    AdvisoryRequest:
+      type: object
+      required: [lat, lon]
+      properties:
+        lat: { type: number, format: float, example: 14.71, description: query latitude }
+        lon: { type: number, format: float, example: 75.78, description: query longitude }
+        date:
+          type: string
+          format: date
+          example: "2025-01-30"
+          description: anchor / as-of date (YYYY-MM-DD). Default today; must be today or earlier.
+        verbose:
+          type: boolean
+          default: false
+          description: include internal reasoning (full normals, local band, z-spreads, freshness).
+    AdvisoryResponse:
+      type: object
+      description: >
+        Always HTTP 200 for a well-formed request. `status=ok` is a full advisory. For a future
+        date, no/too-far wells, or missing data the advisory DEGRADES GRACEFULLY to
+        `status=insufficient_data` — it returns a `reason` and a safe farmer `message`, with
+        `numbers`/`regime`/`crop_guidance` null (it never hard-errors on the query). `status=error`
+        covers two failure cases: the service not being loaded (HTTP 503), OR an UNEXPECTED internal
+        failure on a well-formed request — which is caught and returned as HTTP 200 with
+        `error.code=internal_error` and a safe farmer `message` (never a raw 500).
+      properties:
+        status:
+          type: string
+          enum: [ok, insufficient_data, error]
+          example: ok
+          description: "ok = full advisory · insufficient_data = graceful fallback (see reason/message) · error = service not ready (503) OR internal_error caught on a valid request (200, safe message)"
+        reason:
+          type: string
+          description: "present when status=insufficient_data — the precise technical reason (e.g. 'date … is in the future; must be today or earlier', or 'nearest well 13593 km')."
+          example: "date 2027-03-08 is in the future; it must be today (2026-07-28) or earlier."
+        location:
+          type: object
+          properties:
+            lat: { type: number }
+            lon: { type: number }
+        anchor_date: { type: string, format: date, example: "2025-01-30" }
+        forecast_date: { type: string, format: date, nullable: true, example: "2025-04-30", description: anchor + 3 months (null if insufficient_data) }
+        numbers:
+          type: object
+          description: signed changes in depth-to-water (m). <0 = water table rises (recharge); >0 = falls.
+          properties:
+            forecast_change_m: { type: number, description: 3-month forecast change }
+            forecast_change_m_6m: { type: number, description: 6-month forecast change }
+            normal_seasonal_change_m: { type: number }
+            normal_seasonal_change_m_6m: { type: number }
+            latest_yoy_change_m: { type: number }
+            normal_yoy_change_m: { type: number }
+        regime:
+          type: object
+          description: forecast vs local normal, binned
+          properties:
+            a: { type: string, enum: [above, normal, below], description: 3-month vs seasonal normal }
+            b: { type: string, enum: [above, normal, below], description: year-over-year }
+            a_6m: { type: string, enum: [above, normal, below], description: 6-month vs seasonal normal }
+        long_crop:
+          type: object
+          properties:
+            allowed: { type: boolean, description: workable only if BOTH 3m and 6m are at/above normal }
+            reason: { type: string }
+        confidence:
+          type: object
+          properties:
+            level: { type: string, enum: [well-supported, mixed, thin] }
+            freshness: { type: string, enum: [good, medium, poor], description: present when verbose=true }
+        crop_guidance:
+          type: object
+          nullable: true
+          description: null when status=insufficient_data (no crop guidance is given)
+          properties:
+            water_need: { type: string }
+            duration_hint: { type: string }
+            long_crop_ok: { type: boolean }
+            type_examples: { type: array, items: { type: string } }
+            rule: { type: string }
+        message:
+          type: string
+          description: >
+            farmer-facing, number-free message (Gemma-phrased, or a deterministic template). ALWAYS
+            present — on insufficient_data it carries a safe "not enough nearby well data … check
+            locally (KVK)" fallback.
+        error:
+          type: object
+          description: >
+            present ONLY when status=error. Two cases: `init_error` — the service is not loaded
+            (HTTP 503); or `internal_error` — an unexpected failure on a well-formed request, caught
+            and returned at HTTP 200 with a safe farmer `message` (never a raw 500). Guard/data issues
+            (future date, no/far wells, missing data) do NOT use this — they return
+            status=insufficient_data + a `reason`, at HTTP 200.
+          properties:
+            code: { type: string, enum: [init_error, internal_error], example: internal_error }
+            message: { type: string }

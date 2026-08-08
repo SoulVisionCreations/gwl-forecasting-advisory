@@ -1,0 +1,129 @@
+================================================================================
+CONSENSUS CONFIDENCE MEASURE — design note
+branch: use_case_confidence_measure  (off use_case_experiment)
+================================================================================
+
+PURPOSE
+-------
+Replace the advisory's confidence layer (weakest-link of distance + history +
+freshness) with a spatial-CONSENSUS measure: do the neighbouring wells AGREE about
+the trend at the farmer's plot Q? Agreement -> high confidence; scatter -> low.
+
+The forecast value at Q is unchanged: it is still the IDW(1/d^2) interpolation of the
+neighbour wells' predicted change_m (this already exists in the engine). What changes
+is ONLY how much we TRUST that value, and the number that expresses it.
+
+KEY PRINCIPLE — poll, don't (only) average
+------------------------------------------
+Interpolation alone invents a value at Q by averaging neighbour change_m. Averaging raw
+change_m across different aquifers is dubious (a granite well and an alluvial well have
+very different absolute behaviour). So instead of relying on the average, we POLL each
+well:
+
+  z_i = (well_i's value  -  well_i's OWN normal) / well_i's OWN std
+
+The z-score normalises each well against ITS OWN history, so aquifer/scale differences
+wash out: two wells with very different raw change_m can both read z=+3 ("way drier than
+normal FOR ME"). Agreement on the z's = agreement on the ANOMALY, which is physically
+meaningful everywhere.
+
+If the 1/d^2-weighted spread (SD) of the z's is small, the wells agree -> high confidence
+AND the IDW interpolation of change_m is a trustworthy rough estimate. If the spread is
+large, the wells disagree -> low confidence AND the IDW value is flagged.
+
+This is the same pattern used by NDVI forecasting (point-z consensus within a cutoff).
+
+THREE AXES
+----------
+Confidence is computed PER trend axis, because each drives a different part of the
+decision:
+  - seasonal 3m   -> the main call            (regime bin a)
+  - seasonal 6m   -> the long-crop gate        (regime bin a_6m)
+  - year-over-year-> the deficit/surplus axis  (regime bin b)
+
+3m and 6m z-numerators are the model FORECAST at each well (future -> cannot be observed;
+each per-well forecast is anchored to that well's OWN data, so agreement is informative,
+and we score agreement AMONG neighbours, not against Q's blend, to avoid circularity).
+yoy z-numerator is each well's latest OBSERVED year-over-year change (real data).
+
+ALGORITHM (per axis)
+--------------------
+1. For each neighbour well with enough history:
+     normal_i, std_i = mean & std of that well's OWN change for this axis, over ~10 yrs
+                       (seasonal: the anchor's calendar window mf->mf+H; yoy: y->y+1).
+     value_i         = 3m/6m: the model's per-well predicted_delta;  yoy: latest observed.
+     z_i             = (value_i - normal_i) / max(std_i, STD_FLOOR)
+2. Weights w_i = 1/d_i^2 (same weights as the IDW value).
+3. Weighted mean  z_bar = sum(w_i z_i) / sum(w_i)
+   Weighted SD    SD    = sqrt( sum(w_i (z_i - z_bar)^2) / sum(w_i) )   (population style)
+4. z-spread band (NDVI cutoffs, provisional):
+     SD < 0.5   -> HIGH     (tight agreement)
+     0.5 - 1.0  -> MEDIUM
+     SD >= 1.0  -> LOW      (disagree / mixed)
+5. freshness band (age of anchor GWL, days since last real reading; shared across axes):
+     <= 120 -> HIGH,   <= 270 -> MEDIUM,   > 270 -> LOW
+6. axis confidence = weakest-link( z-spread band, freshness band )
+7. NO min-well GATE. The 1/d^2 weighting already handles proximity: a near well dominates
+   the weighted mean AND collapses the weighted SD -> 0 -> good, so being on/near ONE good
+   well is enough (if that well's forecast is off, that is MODEL error, not a consensus
+   failure). Edges: a single contributing well has no spread -> rely on it (treat as good);
+   zero wells -> LOW. The 'nearest well too far' case is handled UPSTREAM by the advisory's
+   nearest_km > 15 km decline (the only absolute-distance guard; the weighted SD is scale-
+   free and cannot see absolute distance). A well still needs >= MIN_YEARS history to give a
+   valid z (a per-well data-quality floor, not a well-count gate).
+
+OVERALL confidence
+------------------
+  overall = min( 3m , yoy )        # the axes the main regime call rests on
+  6m is reported separately and only gates long-crop / raises a "long-season uncertain"
+  caveat when LOW — it never corrupts the main call (the gate is asymmetric).
+
+Distance is now absorbed into the 1/d^2 weighting + the neighbour radius; history is
+absorbed into the min-well gate; freshness is kept. So the old confidence.assess
+(distance/history/freshness weakest-link) is SUPERSEDED for the advisory.
+
+WHAT IS REUSED (already in the base branch — not rebuilt)
+-------------------------------------------------
+  - per-well forecasts (3m & 6m): engine runs the model on ALL k neighbours and returns
+    per-well StationPrediction.predicted_delta. Exposed via a new thin helper
+    engine.predict_with_neighbours() -> (response, preds) in ONE pipeline run (no extra
+    model calls; the advisory already calls both engines).
+  - IDW(1/d^2) interpolation of change_m at Q: interpolate() -> response.change_m.
+  - per-well history + geometry: neighbours.gather -> nb.series / nb.distances / nb.weights.
+  - freshness: advisory.py already parses "Nd stale" -> freshness_days.
+  - normals/bands/regime bins/decision layer/phrasing: UNCHANGED.
+
+WHAT IS NEW
+-----------
+  - advisory/consensus.py: per-well mean/std per axis, per-well z, 1/d^2-weighted SD,
+    NDVI bands, weakest-link(freshness), min-well gate -> per-axis + overall confidence.
+  - engine.predict_with_neighbours(): predict() + the raw preds list (one run).
+  - advisory.py wiring: capture per-well preds, call consensus, replace confidence.assess.
+
+CONFIDENCE OUTPUT SHAPE
+-----------------------
+  default : {level}
+  verbose : + {freshness}
+  (level = min(3m, yoy); 6m consensus is computed but EXCLUDED from `level` and not surfaced.
+   The per-axis levels + z_sds are internal-only. A single-well axis scores z_sd = 0.0.)
+
+PARAMETERS (provisional -> confirm by calibration backtest)
+-----------------------------------------------------------
+  MIN_YEARS = 2 (per-well history floor; low on purpose — sparse data)   STD_FLOOR = 0.2 m
+  z-SD cutoffs   0.5 / 1.0      (NDVI)
+  freshness      120 / 270 days (existing)
+  (no min-well-count gate; nearest_km > 15 km decline is the outer distance boundary)
+
+CALIBRATION (before trusting the cutoffs)
+-----------------------------------------
+  Replay historical (station,date) cases (leave-one-out). Bucket by the confidence the
+  measure assigns; check that HIGH really carries smaller forecast error / more-correct
+  bins than LOW. If the SD-vs-error knee is not at 0.5/1.0, move the cutoffs. (Not part of
+  the serving path — an offline eval script.)
+
+DEPLOYMENT
+----------
+  Separate checkout on the head node: $HOME/gwl_forecasting_confidence tracking
+  use_case_confidence_measure. New service on PORT 8101, repo-spec env (gemma3:4b + nwdp).
+  Port 8100 (use_case_experiment) is untouched.
+================================================================================
