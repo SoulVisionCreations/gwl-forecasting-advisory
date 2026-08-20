@@ -1,0 +1,61 @@
+GWL Forecasting (Prithvi-EO + TFT)
+Copyright 2026 SoulVisionCreations
+
+This product is licensed under the Apache License, Version 2.0 (see the LICENSE file).
+
+--------------------------------------------------------------------------------
+Third-party components, data, and attributions
+--------------------------------------------------------------------------------
+
+This product includes, depends on, or was trained using the following third-party
+works. Each remains under its own license; the attributions below are provided for
+informational purposes and do not modify the Apache-2.0 License above.
+
+1. Prithvi-EO-2.0-300M foundation model
+   Authors : NASA & IBM
+   License : Apache License, Version 2.0
+   Source  : https://huggingface.co/ibm-nasa-geospatial/Prithvi-EO-2.0-300M-TL
+   Paper   : "Prithvi-EO-2.0: A Versatile Multi-Temporal Foundation Model for Earth
+             Observation Applications", arXiv:2412.02732
+   Use     : Frozen satellite-imagery encoder (LoRA fine-tuned). The base weights are the
+             public Prithvi-EO-2.0-300M-TL checkpoint (unmodified, frozen), shipped inside the
+             Model bundle; the architecture code is vendored as `prithvi_mae.py`.
+
+2. HLS (Harmonized Landsat Sentinel-2) satellite imagery
+   Source  : NASA / USGS (Landsat) and Copernicus / ESA (Sentinel-2)
+   Use      : Input imagery composites, fetched live via Google Earth Engine.
+
+3. Rainfall and temperature reanalysis (CHIRPS, ERA5)
+   Use      : Dynamic weather features, fetched live via Google Earth Engine.
+
+4. Open-Meteo forecast weather
+   License  : CC-BY 4.0
+   Use      : Forecast-window conditioning features, fetched live.
+
+5. Groundwater-level observations
+   Source   : Central Ground Water Board (CGWB) / India-WRIS / NWDP
+   License  : Government Open Data License – India (GODL-India)
+   Use      : Training targets/history and live "current" readings at inference.
+
+6. Gemma (gemma3:4b) large language model
+   Author   : Google
+   License  : Gemma Terms of Use (https://ai.google.dev/gemma/terms)
+   Use      : OPTIONAL — phrases the advisory's farmer-facing message when
+              GWL_ADVISORY_SLM=1. Served locally via Ollama; NOT shipped or
+              redistributed with this product. The advisory's decision and all
+              numeric outputs are produced deterministically and are identical
+              with or without Gemma (a built-in template is used when it is absent).
+
+--------------------------------------------------------------------------------
+Dataset
+--------------------------------------------------------------------------------
+
+The published training dataset (gwl_data.csv) is released under the
+Government Open Data License – India (GODL-India).
+
+--------------------------------------------------------------------------------
+Notes
+--------------------------------------------------------------------------------
+
+- Google Earth Engine is used only to fetch the public input layers listed above.
+  Model outputs are not encumbered by Google Earth Engine terms of service.

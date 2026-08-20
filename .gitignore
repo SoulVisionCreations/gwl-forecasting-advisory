@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+# Model + data assets (downloaded from AIKosh; never committed — see weights/README.md, data/README.md)
+weights/*
+!weights/README.md
+data/*
+!data/README.md
+
+# Local run outputs / caches
+runs/
+outputs/
+*.log
+inference_cache/
+composites/
+.DS_Store
