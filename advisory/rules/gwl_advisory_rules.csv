@@ -1,0 +1,7 @@
+water_trend,vs_normal,net_read,crop_lean,tier
+rising,above,gaining water and better than usual,water-heavy; can expand,water-heavy
+rising,normal,gaining water about as usual,usual crop; no change,usual
+rising,below,gaining water but weaker than usual,gaining but weak; don't over-expand,usual-to-light
+falling,above,losing water but less than usual,drawing down — go easy on water,usual-to-light
+falling,normal,losing water about as usual,usual crop; watch water use,usual
+falling,below,losing water and worse than usual,water-light; conserve,water-light
