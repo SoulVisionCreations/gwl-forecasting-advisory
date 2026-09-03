@@ -1,7 +1,7 @@
 GWL Forecasting (Prithvi-EO + TFT)
 Copyright 2026 SoulVisionCreations
 
-This product is licensed under the Apache License, Version 2.0 (see the LICENSE file).
+This product is licensed under the CC-BY-4.0(see the LICENSE file).
 
 --------------------------------------------------------------------------------
 Third-party components, data, and attributions
@@ -9,7 +9,7 @@ Third-party components, data, and attributions
 
 This product includes, depends on, or was trained using the following third-party
 works. Each remains under its own license; the attributions below are provided for
-informational purposes and do not modify the Apache-2.0 License above.
+informational purposes.
 
 1. Prithvi-EO-2.0-300M foundation model
    Authors : NASA & IBM
