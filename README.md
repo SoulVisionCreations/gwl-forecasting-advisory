@@ -74,5 +74,5 @@ A raw single-horizon forecast (no advisory) is in [`docs/INFERENCE.md`](docs/INF
 
 ## License
 
-Code & model weights: CC-BY-4.0. Training data: GODL-India. The Prithvi-EO base is CC-BY-4.0
+Code & model weights: CC-BY-4.0. Training data: GODL-India. The Prithvi-EO base is Apache-2.0
 (NASA-IBM); see `NOTICE`.
